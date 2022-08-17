@@ -2,10 +2,13 @@ package main
 
 import (
 	"fmt"
+	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
 	"syscall"
+
+	cgroupsv2 "github.com/containerd/cgroups/v2"
 )
 
 func main() {
@@ -21,7 +24,8 @@ func main() {
 	}
 }
 
-func parent() {
+func parent() error {
+
 	cmd := exec.Command("/proc/self/exe", append([]string{"child"}, os.Args[2:]...)...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Cloneflags: syscall.CLONE_NEWUTS | syscall.CLONE_NEWPID | syscall.CLONE_NEWNS,
@@ -34,9 +38,30 @@ func parent() {
 		fmt.Println("ERROR", err)
 		os.Exit(1)
 	}
+
+	return nil
 }
 
 func child() error {
+	minMem := int64(1)                 // 1K
+	maxMem := int64(500 * 1024 * 1024) //100M
+	res := cgroupsv2.Resources{
+		Memory: &cgroupsv2.Memory{
+			// values are in bytes: https://www.kernel.org/doc/html/latest/admin-guide/cgroup-v2.html#memory-interface-files
+			Min: &minMem,
+			Max: &maxMem,
+		},
+	}
+	mgr, err := cgroupsv2.NewManager("/sys/fs/cgroup", "/go-container-cgroupv2", &res)
+
+	if err != nil {
+		return fmt.Errorf("creating cgroups v2: %w", err)
+	}
+	defer mgr.Delete()
+
+	if err := ioutil.WriteFile("/sys/fs/cgroup/go-container-cgroupv2/cgroup.procs", []byte(fmt.Sprintf("%d\n", os.Getpid())), 0644); err != nil {
+		return fmt.Errorf("Cgroups register tasks to my-container namespace failed: %w", err)
+	}
 	log.Println("prepareRoot")
 	if err := syscall.Mount("", "/", "", syscall.MS_SLAVE|syscall.MS_REC, ""); err != nil {
 		return fmt.Errorf("prepare RootFS: %w", err)
