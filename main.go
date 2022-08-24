@@ -29,22 +29,28 @@ func parent() error {
 
 	cmd := exec.Command("/proc/self/exe", append([]string{"child"}, os.Args[2:]...)...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Cloneflags: syscall.CLONE_NEWUTS | syscall.CLONE_NEWPID | syscall.CLONE_NEWNS | syscall.CLONE_NEWIPC | syscall.CLONE_NEWNET | syscall.CLONE_NEWUSER,
+		Cloneflags: syscall.CLONE_NEWIPC |
+			syscall.CLONE_NEWNET |
+			syscall.CLONE_NEWNS |
+			syscall.CLONE_NEWPID |
+			syscall.CLONE_NEWUSER |
+			syscall.CLONE_NEWUTS,
 		UidMappings: []syscall.SysProcIDMap{
 			{
 				ContainerID: 0,
 				HostID:      os.Getuid(),
-				Size:        10,
+				Size:        1,
 			},
 		},
 		GidMappings: []syscall.SysProcIDMap{
 			{
 				ContainerID: 0,
 				HostID:      os.Getgid(),
-				Size:        10,
+				Size:        1,
 			},
 		},
 	}
+
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -73,6 +79,10 @@ func child() error {
 		return fmt.Errorf("Setting hostname failed: %w", err)
 	}
 
+	log.Println("mount /proc")
+	if err := syscall.Mount("proc", "//newroot/proc", "proc", syscall.MS_NOEXEC|syscall.MS_NOSUID|syscall.MS_NODEV, ""); err != nil {
+		return fmt.Errorf("Proc mount failed: %w", err)
+	}
 	//cgroup meory limit
 	minMem := int64(1)                 // 1K
 	maxMem := int64(500 * 1024 * 1024) //100M
@@ -100,17 +110,18 @@ func child() error {
 		return fmt.Errorf("prepare Rootfs: %w", err)
 	}
 
-	log.Println("mkdir newroot/putold")
-	if err := os.MkdirAll("newroot/putold", 0755); err != nil {
-		return fmt.Errorf("creating directory: %w", err)
+	log.Println("bind mount .//newroot")
+	if err := syscall.Mount("/newroot", "/newroot", "", syscall.MS_BIND|syscall.MS_REC, ""); err != nil {
+		return fmt.Errorf("bind mounting /newroot: %w", err)
 	}
-	log.Println("bind mount ./newroot")
-	if err := syscall.Mount("newroot", "newroot", "", syscall.MS_BIND|syscall.MS_REC, ""); err != nil {
-		return fmt.Errorf("bind mounting newroot: %w", err)
+
+	log.Println("mkdir /newroot/putold")
+	if err := os.MkdirAll("/newroot/putold", 0700); err != nil {
+		return fmt.Errorf("creating directory: %w", err)
 	}
 
 	log.Println("pivot_root")
-	if err := syscall.PivotRoot("newroot", "newroot/putold"); err != nil {
+	if err := syscall.PivotRoot("/newroot", "/newroot/putold"); err != nil {
 		return fmt.Errorf("pivot root: %w", err)
 	}
 
@@ -121,11 +132,6 @@ func child() error {
 
 	if err := syscall.Unmount("/putold", syscall.MNT_DETACH); err != nil {
 		return fmt.Errorf("unmount old root dir %w", err)
-	}
-
-	log.Println("mount /proc")
-	if err := syscall.Mount("proc", "proc", "proc", syscall.MS_NOEXEC|syscall.MS_NOSUID|syscall.MS_NODEV, ""); err != nil {
-		return fmt.Errorf("mounting new /proc in container: %w", err)
 	}
 
 	cmd := exec.Command(os.Args[2], os.Args[3:]...)
