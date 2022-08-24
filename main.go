@@ -97,12 +97,29 @@ func parent() error {
 		return fmt.Errorf("can not crate veth pair")
 	}
 
+	pair_index, err := netlink.VethPeerIndex(veth)
+	if err != nil {
+		return fmt.Errorf("can not get pair index")
+	}
 	fd, err := unix.Open(netnspath, unix.O_RDONLY|unix.O_CLOEXEC, 0)
 	if err != nil {
 		return fmt.Errorf("can not crate veth pair")
 	}
 	if err := netlink.LinkSetNsFd(veth, fd); err != nil {
-		return fmt.Errorf("can not jpin veth")
+		return fmt.Errorf("can not join veth")
+	}
+
+	pair_link, err := netlink.LinkByIndex(pair_index)
+	if err != nil {
+		return fmt.Errorf("can not get pair link by index")
+	}
+
+	bridge_link, err := netlink.LinkByName("br0")
+	if err != nil {
+		return fmt.Errorf("can not get bridge link by name ")
+	}
+	if err := netlink.LinkSetMaster(pair_link, bridge_link); err != nil {
+		return fmt.Errorf("can not join veth")
 	}
 
 	if err := cmd.Wait(); err != nil {
