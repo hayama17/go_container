@@ -9,6 +9,7 @@ import (
 	"syscall"
 
 	"github.com/vishvananda/netlink"
+	"golang.org/x/sys/unix"
 
 	cgroupsv2 "github.com/containerd/cgroups/v2"
 )
@@ -96,14 +97,13 @@ func parent() error {
 		return fmt.Errorf("can not crate veth pair")
 	}
 
-	// var stat syscall.Stat_t
-	if fs, err := os.Lstat("/proc/" + fmt.Sprint(os.Getpid()) + "/fd"); err != nil {
-		panic(err)
-	} else {
-		fmt.Println(fs.Name())
+	fd, err := unix.Open(netnspath, unix.O_RDONLY|unix.O_CLOEXEC, 0)
+	if err != nil {
+		return fmt.Errorf("can not crate veth pair")
 	}
-
-	// if err := netlink.LinkSetNsFd(veth,)
+	if err := netlink.LinkSetNsFd(veth, fd); err != nil {
+		return fmt.Errorf("can not jpin veth")
+	}
 
 	if err := cmd.Wait(); err != nil {
 		fmt.Println("ERROR", err)
