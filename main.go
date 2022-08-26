@@ -182,29 +182,3 @@ func child() error {
 	}
 	return nil
 }
-
-// file, err := os.OpenFile("address.json", os.O_RDWR|os.O_CREATE, 0664)
-// 	if err != nil {
-// 		return fmt.Errorf("can not open address.json")
-// 	}
-// 	var address_Data []int
-// 	address := 0
-// 	json.NewDecoder(file).Decode(&address_Data)
-
-// 	for i := 1; i < 255; i++ {
-
-// 		for j := 0; j < len(address_Data); j++ {
-// 			if address_Data[j] == i {
-// 				address = 0
-// 				break
-// 			}
-// 			address = i
-// 		}
-// 		if address != 0 {
-// 			break
-// 		}
-
-// 	}
-// 	address_Data = append(address_Data, address)
-
-// 	json.NewEncoder(file).Encode(address_Data)
