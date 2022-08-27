@@ -30,6 +30,7 @@ func parent() error {
 	fs := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 	netns := fs.String("n", "go_container", "netns flag")
 	fs.String("i", "10.0.0.2/24", "container ip address flag")
+	fs.String("c", "go-container-cgroupv2", "cgroup name flag")
 	fs.Parse(os.Args[2:])
 	netns_path := "/var/run/netns/" + *netns
 
@@ -105,6 +106,12 @@ func parent() error {
 
 func child() error {
 
+	fs := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
+	eth := fs.String("n", "go_container", "string flag")
+	ip_address := fs.String("i", "10.0.0.2/24", "string flag")
+	cg := fs.String("c", "go-container-cgroupv2", "cgroup name flag")
+	fs.Parse(os.Args[2:])
+
 	//set hostname
 	log.Println("set hostname")
 	if err := syscall.Sethostname([]byte("container")); err != nil {
@@ -117,6 +124,10 @@ func child() error {
 		return fmt.Errorf("Proc mount failed: %w", err)
 	}
 
+	if err := syscall.Mount("/dev", "/newroot/dev", "", syscall.MS_BIND|syscall.MS_REC, ""); err != nil {
+		return fmt.Errorf("bind mounting /dev: %w", err)
+	}
+
 	//cgroup meory limit
 	minMem := int64(1)                 // 1K
 	maxMem := int64(500 * 1024 * 1024) //100M
@@ -126,9 +137,18 @@ func child() error {
 			Max: &maxMem,
 		},
 	}
-	if err := Make_register_cgroup("go-container-cgroupv2", res); err != nil {
+
+	if err := Make_register_cgroup(*cg, res); err != nil {
 		return err
 	}
+	if err := syscall.Mount("sysfs", "/newroot/sys", "sysfs", syscall.MS_NOEXEC|syscall.MS_NOSUID|syscall.MS_NODEV, ""); err != nil {
+		return fmt.Errorf("bind mounting /sys: %w", err)
+	}
+
+	if err := syscall.Mount("/sys/fs/cgroup/"+*cg, "/newroot/sys/fs/cgroup", "", syscall.MS_BIND|syscall.MS_REC, ""); err != nil {
+		return fmt.Errorf("bind mounting"+*cg+": %w", err)
+	}
+
 	//pivot root
 	log.Println("prepare Rootfs")
 	if err := syscall.Mount("", "/", "", syscall.MS_PRIVATE|syscall.MS_REC, ""); err != nil {
@@ -161,10 +181,6 @@ func child() error {
 
 	//prepare network from args
 	log.Println("setup network")
-	fs := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
-	eth := fs.String("n", "go_container", "string flag")
-	ip_address := fs.String("i", "10.0.0.2/24", "string flag")
-	fs.Parse(os.Args[2:])
 
 	// setup network
 	if err := Network_setup(*eth, *ip_address); err != nil {
