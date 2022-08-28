@@ -69,13 +69,14 @@ func parent() error {
 	//make netns
 	log.Println(netns)
 	proc_path := "/proc/" + fmt.Sprint(cmd.Process.Pid) + "/ns/net"
-
+	log.Println("make_netns")
 	fd, err := Make_netns(netns_path, proc_path)
 	if err != nil {
 		return fmt.Errorf("make_netns")
 	}
 
 	//set veth
+	log.Println("attach_veth")
 	if err := Make_attach_veth(*netns, fd, "br0"); err != nil {
 		return fmt.Errorf("make_attach_veth")
 	}
@@ -124,10 +125,6 @@ func child() error {
 		return fmt.Errorf("Proc mount failed: %w", err)
 	}
 
-	if err := syscall.Mount("/dev", "/newroot/dev", "", syscall.MS_BIND|syscall.MS_REC, ""); err != nil {
-		return fmt.Errorf("bind mounting /dev: %w", err)
-	}
-
 	//cgroup meory limit
 	minMem := int64(1)                 // 1K
 	maxMem := int64(500 * 1024 * 1024) //100M
@@ -139,12 +136,13 @@ func child() error {
 	}
 
 	if err := Make_register_cgroup(*cg, res); err != nil {
-		return err
+		return fmt.Errorf("bind mounting /sys: %w", err)
 	}
+	log.Println("mount sys")
 	if err := syscall.Mount("sysfs", "/newroot/sys", "sysfs", syscall.MS_NOEXEC|syscall.MS_NOSUID|syscall.MS_NODEV, ""); err != nil {
 		return fmt.Errorf("bind mounting /sys: %w", err)
 	}
-
+	log.Println("bind mount cgroup")
 	if err := syscall.Mount("/sys/fs/cgroup/"+*cg, "/newroot/sys/fs/cgroup", "", syscall.MS_BIND|syscall.MS_REC, ""); err != nil {
 		return fmt.Errorf("bind mounting"+*cg+": %w", err)
 	}

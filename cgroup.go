@@ -19,7 +19,11 @@ func Make_register_cgroup(Manager_name string, res cgroupsv2.Resources) error {
 
 	log.Println("register tasks to my-container")
 	if err := ioutil.WriteFile("/sys/fs/cgroup/"+Manager_name+"/cgroup.procs", []byte(fmt.Sprintf("%d\n", os.Getpid())), 0644); err != nil {
+		log.Println("err")
+
 		return err
 	}
+	log.Println("ok")
+
 	return nil
 }
