@@ -30,6 +30,9 @@ ubuntu:
 	mkdir /newroot/newroot
 	tar -xzf ubuntu-jammy-oci-amd64-root.tar.gz -C /newroot/newroot
 	rm ubuntu-jammy-oci-amd64-root.tar.gz
+	sh -c "cat <<EOF > /newroot/etc/apt/apt.conf.d/sandbox-disable APT::Sandbox::User "root"; EOF"
 
 simple:
 	cp ../simple_container/simple /newroot/root
+	cp ../mem_leak/mem_leak.out  /newroot/root
+	cp ../mem_leak/mem_leak.out  /newroot/newroot/root

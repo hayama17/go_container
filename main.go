@@ -115,19 +115,26 @@ func child() error {
 
 	//cgroup meory limit
 	minMem := int64(1)                 // 1K
-	maxMem := int64(500 * 1024 * 1024) //100M
-	res := cgroupsv2.Resources{
+	maxMem := int64(500 * 1024 * 1024) //500M
+	all_res := cgroupsv2.Resources{
 		Memory: &cgroupsv2.Memory{
 			Min: &minMem,
 			Max: &maxMem,
 		},
 	}
-	mgr, err := Make_register_cgroup(*cg, res)
 
-	if err != nil {
-		mgr.Delete()
-		return fmt.Errorf("bind mounting /sys: %w", err)
+	//cgroup meory limit
+	pmaxMem := int64(100 * 1024 * 1024) //100M
+	domain0_res := cgroupsv2.Resources{
+		Memory: &cgroupsv2.Memory{
+			Min: &minMem,
+			Max: &pmaxMem,
+		},
 	}
+	if err := Make_register_cgroup(*cg, all_res, domain0_res); err != nil {
+		return fmt.Errorf("make&register cgroup : %w", err)
+	}
+
 	log.Println("mount sys")
 	if err := syscall.Mount("sysfs", "/newroot/sys", "sysfs", syscall.MS_NOEXEC|syscall.MS_NOSUID|syscall.MS_NODEV, ""); err != nil {
 		return fmt.Errorf("bind mounting /sys: %w", err)

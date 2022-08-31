@@ -9,20 +9,27 @@ import (
 	cgroupsv2 "github.com/containerd/cgroups/v2"
 )
 
-func Make_register_cgroup(Manager_name string, res cgroupsv2.Resources) (*cgroupsv2.Manager, error) {
+func Make_register_cgroup(Manager_name string, all_res cgroupsv2.Resources, domain0_res cgroupsv2.Resources) error {
 	log.Println("create cgroup maneger")
-	mgr, err := cgroupsv2.NewManager("/sys/fs/cgroup", "/"+Manager_name, &res)
+	mgr, err := cgroupsv2.NewManager("/sys/fs/cgroup", "/"+Manager_name, &all_res)
 	if err != nil {
-		return nil, err
+		return err
 	}
+	defer mgr.Delete()
+
+	pmgr, err := cgroupsv2.NewManager("/sys/fs/cgroup/"+Manager_name, "/domain0", &domain0_res)
+	if err != nil {
+		return err
+	}
+	defer pmgr.Delete()
 
 	log.Println("register tasks to my-container")
-	if err := ioutil.WriteFile("/sys/fs/cgroup/"+Manager_name+"/cgroup.procs", []byte(fmt.Sprintf("%d\n", os.Getpid())), 0644); err != nil {
+	if err := ioutil.WriteFile("/sys/fs/cgroup/"+Manager_name+"/domain0/cgroup.procs", []byte(fmt.Sprintf("%d\n", os.Getpid())), 0644); err != nil {
 		log.Println("err")
 
-		return nil, err
+		return err
 	}
 	log.Println("ok")
 
-	return mgr, nil
+	return nil
 }
