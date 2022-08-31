@@ -30,9 +30,10 @@ func parent() error {
 	fs := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 	netns := fs.String("n", "go_container", "netns flag")
 	fs.String("i", "10.0.0.2/24", "container ip address flag")
-	fs.String("c", "go-container-cgroupv2", "cgroup name flag")
+	cg := fs.String("c", "go-container-cgroupv2", "cgroup name flag")
 	fs.Parse(os.Args[2:])
 	netns_path := "/var/run/netns/" + *netns
+	cg_path := "/sys/fs/cgroup/" + *cg
 
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Cloneflags: syscall.CLONE_NEWIPC |
@@ -67,7 +68,6 @@ func parent() error {
 	}
 
 	//make netns
-	log.Println(netns)
 	proc_path := "/proc/" + fmt.Sprint(cmd.Process.Pid) + "/ns/net"
 	log.Println("make_netns")
 	fd, err := Make_netns(netns_path, proc_path)
@@ -83,24 +83,12 @@ func parent() error {
 
 	if err := cmd.Wait(); err != nil {
 		fmt.Println("ERROR", err)
-		log.Println("delete netns")
-		if err := syscall.Unmount(netns_path, syscall.MNT_DETACH); err != nil {
-			return fmt.Errorf("unmount old root dir %w", err)
-		}
-		if err := os.Remove(netns_path); err != nil {
-			return fmt.Errorf("rm %s: %w", netns_path, err)
-		}
+		delete_namespace(netns_path, cg_path)
 		os.Exit(1)
 	}
 
 	//delete netns
-	log.Println("delete netns")
-	if err := syscall.Unmount(netns_path, syscall.MNT_DETACH); err != nil {
-		return fmt.Errorf("unmount old root dir %w", err)
-	}
-	if err := os.Remove(netns_path); err != nil {
-		return fmt.Errorf("rm %s: %w", netns_path, err)
-	}
+	delete_namespace(netns_path, cg_path)
 
 	return nil
 }
@@ -134,8 +122,10 @@ func child() error {
 			Max: &maxMem,
 		},
 	}
+	mgr, err := Make_register_cgroup(*cg, res)
 
-	if err := Make_register_cgroup(*cg, res); err != nil {
+	if err != nil {
+		mgr.Delete()
 		return fmt.Errorf("bind mounting /sys: %w", err)
 	}
 	log.Println("mount sys")
@@ -193,6 +183,20 @@ func child() error {
 	if err := cmd.Run(); err != nil {
 		fmt.Println("ERROR", err)
 		os.Exit(1)
+	}
+	return nil
+}
+
+func delete_namespace(netns_path string, cg_path string) error {
+	log.Println("delete namespace")
+	if err := syscall.Unmount(netns_path, syscall.MNT_DETACH); err != nil {
+		return fmt.Errorf("unmount old root dir %w", err)
+	}
+	if err := os.Remove(netns_path); err != nil {
+		return fmt.Errorf("rm %s: %w", netns_path, err)
+	}
+	if err := os.RemoveAll(cg_path); err != nil {
+		return fmt.Errorf("rm %s: %w", cg_path, err)
 	}
 	return nil
 }

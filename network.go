@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"syscall"
 
@@ -27,6 +28,7 @@ func Make_netns(netns_path string, proc_path string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
+
 	return fd, nil
 
 }
@@ -70,7 +72,7 @@ func Make_attach_veth(veth_name string, fd int, bridge_name string) error {
 	return nil
 }
 
-// bridgeと繋がってるnic名(eth)と設定したいipアドレス(ip_address)を引数にとってnicにip_addressをセットそてloとnicをupにする
+// bridgeと繋がってるnic名(eth)と設定したいipアドレス(ip_address)を引数にとってnicにip_addressをセットそてloとnicをupにする&gatewayをbridgeに設定
 func Network_setup(eth string, ip_address string) error {
 	if lo, err := netlink.LinkByName("lo"); err != nil {
 		return fmt.Errorf("search link by lo %w", err)
@@ -87,6 +89,33 @@ func Network_setup(eth string, ip_address string) error {
 		if err := netlink.LinkSetUp(veth); err != nil {
 			return fmt.Errorf("lo set up: %w ", err)
 		}
+	}
+	dst := &net.IPNet{
+		IP:   net.IPv4(0, 0, 0, 0),
+		Mask: net.CIDRMask(0, 32),
+	}
+
+	ip := net.ParseIP(ip_address)
+
+	gatewayIp := net.ParseIP("10.0.0.1")
+	route := netlink.Route{
+		Scope: netlink.SCOPE_UNIVERSE,
+		Dst:   dst,
+		Src:   ip,
+		Gw:    gatewayIp,
+	}
+	if err := netlink.RouteAdd(&route); err != nil {
+		return err
+	}
+
+	str := "nameserver 8.8.8.8 \n nameserver 8.8.4.4\n"
+	data := []byte(str)
+	f, err := os.Create("/etc/resolv.conf")
+	if err != nil {
+		return err
+	}
+	if _, err := f.Write(data); err != nil {
+		return err
 	}
 
 	return nil
